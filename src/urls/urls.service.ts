@@ -1,7 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from '@nestjs/cache-manager';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient, createClient } from '@supabase/supabase-js';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { CodeGenerator } from '../config/code-generator';
 import { encrypt } from '../middlewares/encrypt';
@@ -14,18 +15,33 @@ interface UrlCache {
 export class UrlsService {
   constructor(
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-    @Inject('SUPABASE_CLIENT') private readonly supabase: SupabaseClient,
+    @Inject('SUPABASE_CLIENT') private readonly supabaseBase: SupabaseClient,
+    private readonly configService: ConfigService,
   ) {}
 
   async createShortUrl(
     longUrl: string,
-    userId: string,          // 👈 Supabase-authenticated user ID
-    password?: string,       // optional password
-    customAlias?: string,    // optional custom alias
+    userId: string,
+    accessToken: string,
+    password?: string,
+    customAlias?: string,
   ): Promise<{ short_url: string; short_code: string; long_url: string }> {
+    
+    // Create an authenticated Supabase client for this request
+    const supabase = createClient(
+      this.configService.get<string>('SUPABASE_URL')!,
+      this.configService.get<string>('SUPABASE_ANON_KEY')!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      }
+    );
 
-    // ✅ Step 1. Check if URL already shortened
-    const { data: existingUrl, error: existingError } = await this.supabase
+    // Step 1: Check if URL already shortened
+    const { data: existingUrl, error: existingError } = await supabase
       .from('urls')
       .select('*')
       .eq('long_url', longUrl)
@@ -34,41 +50,42 @@ export class UrlsService {
     if (existingError && existingError.code !== 'PGRST116') {
       throw new Error('Error checking existing URL');
     }
+    
     if (existingUrl) {
       throw new Error('URL already shortened');
     }
 
-    // ✅ Step 2. Determine short_code (custom alias or random)
+    // Step 2: Determine short_code (custom alias or random)
     let shortCode = customAlias || CodeGenerator();
 
-    // ✅ Step 3. Check for collision
+    // Step 3: Check for collision
     while (true) {
-      const { data: existingCode } = await this.supabase
+      const { data: existingCode } = await supabase
         .from('urls')
         .select('short_code')
         .eq('short_code', shortCode)
         .single();
 
-      if (!existingCode) break; // no collision, good to use
+      if (!existingCode) break; // No collision, good to use
 
       if (customAlias) {
-        throw new Error('Alias already taken');
+        throw new Error('Custom alias already taken');
       }
 
-      shortCode = CodeGenerator(); // generate new random code
+      shortCode = CodeGenerator(); // Generate new random code
     }
 
-    // ✅ Step 4. Hash password if provided
+    // Step 4: Hash password if provided
     let passwordHash: string | null = null;
     if (password) {
       passwordHash = await bcrypt.hash(password, 10);
     }
 
-    // ✅ Step 5. Encrypt long URL (optional, as you mentioned)
+    // Step 5: Encrypt long URL
     const encryptedLongUrl = encrypt(longUrl);
 
-    // ✅ Step 6. Insert into Supabase
-    const { error: insertError } = await this.supabase.from('urls').insert({
+    // Step 6: Insert into Supabase with authenticated client
+    const { error: insertError } = await supabase.from('urls').insert({
       short_code: shortCode,
       long_url: encryptedLongUrl,
       user_id: userId,
@@ -81,17 +98,74 @@ export class UrlsService {
       throw new Error(`Error inserting URL: ${insertError.message}`);
     }
 
-    // ✅ Step 7. Cache the mapping for 1 day (86400s)
+    // Step 7: Cache the mapping for 1 day (86400s)
     const cacheData: UrlCache = { longUrl };
     await this.cacheManager.set(shortCode, cacheData, 86400);
 
-    // ✅ Step 8. Return the full short URL
+    // Step 8: Return the full short URL
     const shortUrl = `${process.env.SHORT_URL_DOMAIN}/${shortCode}`;
-    const response={
-      short_url:shortUrl,
-      short_code:shortCode,
-      long_url:longUrl,
+    
+    return {
+      short_url: shortUrl,
+      short_code: shortCode,
+      long_url: longUrl,
+    };
+  }
+
+  // Example: Get user's URLs (also uses authenticated client)
+  async getUserUrls(userId: string, accessToken: string) {
+    const supabase = createClient(
+      this.configService.get<string>('SUPABASE_URL')!,
+      this.configService.get<string>('SUPABASE_ANON_KEY')!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      }
+    );
+
+    const { data, error } = await supabase
+      .from('urls')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Error fetching URLs: ${error.message}`);
     }
-    return response;
+
+    return data;
+  }
+
+  // Example: Delete URL (also uses authenticated client)
+  async deleteUrl(shortCode: string, userId: string, accessToken: string) {
+    const supabase = createClient(
+      this.configService.get<string>('SUPABASE_URL')!,
+      this.configService.get<string>('SUPABASE_ANON_KEY')!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      }
+    );
+
+    const { error } = await supabase
+      .from('urls')
+      .delete()
+      .eq('short_code', shortCode)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(`Error deleting URL: ${error.message}`);
+    }
+
+    // Remove from cache
+    await this.cacheManager.del(shortCode);
+
+    return { message: 'URL deleted successfully' };
   }
 }

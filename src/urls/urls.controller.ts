@@ -43,9 +43,13 @@ export class UrlsController {
     @Req() req,
   ): Promise<ShortUrlResponseDto> {
     const userId = req.user.id;
-    const { short_url, short_code, long_url } =
-      await this.urlsService.createShortUrl(body.long_url, userId);
-
-    return { short_url, short_code, long_url };
+    const accessToken = req.accessToken;
+      return this.urlsService.createShortUrl(
+      body.long_url,
+      userId,
+      accessToken,
+      body.password,
+      body.customAlias,
+    );
   }
 }

@@ -1,30 +1,26 @@
-import { Module,Global } from "@nestjs/common";
-import { ConfigModule,ConfigService } from "@nestjs/config";
-import { createClient } from "@supabase/supabase-js";
-
-
+import { Module, Global } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { createClient } from '@supabase/supabase-js';
 
 @Global()
 @Module({
-  imports:[ConfigModule],
-  providers:[
+  imports: [ConfigModule],
+  providers: [
     {
-    provide:'SUPABASE_CLIENT',
-    useFactory:(configService:ConfigService)=>{
-      const supabaseUrl=configService.get<string>('SUPABASE_URL');
-      const supabaseAnonKey=configService.get<string>('SUPABASE_ANON_KEY');
-      if(!supabaseUrl || !supabaseAnonKey){
-        throw new Error('Missing Supabase environment variables');
-      }
-      const client = createClient(supabaseUrl,supabaseAnonKey);
-      return client;
+      provide: 'SUPABASE_CLIENT',
+      useFactory: (configService: ConfigService) => {
+        const supabaseUrl = configService.get<string>('SUPABASE_URL');
+        const supabaseAnonKey = configService.get<string>('SUPABASE_ANON_KEY');
+        
+        if (!supabaseUrl || !supabaseAnonKey) {
+          throw new Error('Missing Supabase environment variables');
+        }
+        
+        return createClient(supabaseUrl, supabaseAnonKey);
+      },
+      inject: [ConfigService],
     },
-    inject:[ConfigService],
-  }
   ],
-  exports:['SUPABASE_CLIENT'],
+  exports: ['SUPABASE_CLIENT'],
 })
-
-
-
-export class SupabaseModule{}
+export class SupabaseModule {}
