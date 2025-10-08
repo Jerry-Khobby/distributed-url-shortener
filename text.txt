@@ -1,0 +1,26 @@
+  // ============================================================
+  // Delete URL
+  // ============================================================
+  async deleteUrl(shortCode: string, userId: string, accessToken: string) {
+    const supabase = createClient(
+      this.configService.get<string>('SUPABASE_URL')!,
+      this.configService.get<string>('SUPABASE_ANON_KEY')!,
+      {
+        global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      },
+    );
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError || !userData.user) throw new Error('Invalid authentication token');
+
+    const { error } = await supabase
+      .from('urls')
+      .delete()
+      .eq('short_code', shortCode)
+      .eq('user_id', userData.user.id);
+
+    if (error) throw new Error(`Error deleting URL: ${error.message}`);
+
+    await this.cacheManager.del(shortCode);
+    return { message: 'URL deleted successfully' };
+  }
