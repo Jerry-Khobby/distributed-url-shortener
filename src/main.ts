@@ -5,7 +5,16 @@ import { SwaggerModule,DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+     app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Strip extra properties
+      forbidNonWhitelisted: false, // Don't throw error for extra properties (important!)
+      transform: true, // Transform payloads to DTO instances
+      transformOptions: {
+        enableImplicitConversion: true, // Auto-convert types
+      },
+    }),
+  );
 
     const config = new DocumentBuilder()
     .setTitle('Distributed URL Shortner System')

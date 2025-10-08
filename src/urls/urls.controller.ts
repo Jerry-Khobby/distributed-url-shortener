@@ -23,8 +23,8 @@ export class ShortUrlResponseDto {
 export class UrlsController {
   constructor(private readonly urlsService: UrlsService) {}
 
-  @UseGuards(SupabaseAuthGuard)
   @Post('shorten')
+  @UseGuards(SupabaseAuthGuard)
   @ApiOperation({
     summary: 'Shorten a long URL',
     description:
@@ -40,16 +40,14 @@ export class UrlsController {
   })
   async createShortUrl(
     @Body() body: UrlsDto,
-    @Req() req,
-  ): Promise<ShortUrlResponseDto> {
-    const userId = req.user.id;
-    const accessToken = req.accessToken;
-      return this.urlsService.createShortUrl(
+    @Req() req:any,
+){
+  return this.urlsService.createShortUrl(
       body.long_url,
-      userId,
-      accessToken,
+      req.user.id, // From guard
+      req.accessToken, // From guard
       body.password,
       body.customAlias,
     );
-  }
+}
 }
