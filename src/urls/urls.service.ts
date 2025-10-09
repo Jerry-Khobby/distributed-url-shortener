@@ -6,6 +6,12 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { CodeGenerator } from '../config/code-generator';
 import { encrypt,decrypt } from '../middlewares/encrypt';
+import { Cron,CronExpression } from '@nestjs/schedule';
+
+
+
+
+
 
 
 
@@ -16,6 +22,47 @@ export class UrlsService {
     @Inject('SUPABASE_CLIENT') private readonly supabaseBase: SupabaseClient,
     private readonly configService: ConfigService,
   ) {}
+
+
+ //@Cron('*/10 * * * * *')
+ async handleExpiredUrls(){
+  console.log('⏰ Checking for expired URLs...')
+  try{
+    const now = new Date().toISOString();
+    // fetch URL that have expired 
+    const {data:expiredUrls,error:fetchError} = await this.supabaseBase.from('urls').select('id,short_code')
+    .lt('expires_at',now)
+
+    if(fetchError){
+      console.error('❌ Error fetching expired URLs:', fetchError.message);
+        return;
+    }
+    if(!expiredUrls || expiredUrls.length===0){
+        console.log('✅ No expired URLs found.');
+        return;
+    }
+    console.log(`🗑 Found ${expiredUrls.length} expired URL(s). Deleting...`);
+    const shortCodes = expiredUrls.map((u)=>u.short_code);
+
+    const {error:deleteError}= await this.supabaseBase
+    .from('urls')
+    .delete()
+    .lt('expires_at',now)
+          if (deleteError) {
+        console.error('❌ Error deleting expired URLs:', deleteError.message);
+      } else {
+        console.log(`🧹 Deleted expired URLs: ${shortCodes.join(', ')}`);
+
+        // Optional: remove them from cache too
+        for (const code of shortCodes) {
+          await this.cacheManager.del(code);
+        }
+      }
+
+  }catch(err){
+console.error('🔥 Cron job failed:', err.message);
+  }
+ }
 
 private async ensureProfileExists(
   supabase: SupabaseClient,
@@ -163,6 +210,9 @@ private async recordClick(
     // Step 6: Encrypt long URL
     const encryptedLongUrl = encrypt(long_url);
 
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getMinutes()+2);
+
     // Step 7: Insert into Supabase
     const { error: insertError } = await supabase.from('urls').insert({
       short_code: shortCode,
@@ -171,6 +221,7 @@ private async recordClick(
       custom_alias: !!customAlias,
       password_hash: passwordHash,
       is_active: true,
+      expires_at: expiresAt.toISOString(),
     });
 
     if (insertError) throw new Error(`Error inserting URL: ${insertError.message}`);

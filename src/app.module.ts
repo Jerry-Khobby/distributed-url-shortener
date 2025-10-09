@@ -7,11 +7,13 @@ import { SupabaseModule } from './supabase/supabase.strategy';
 import { CacheModule } from '@nestjs/cache-manager';
 import { RedisOptions } from './config/app-options.constants';
 import { SupabaseAuthGuard } from './middlewares/supabase.guard';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [UrlsModule,ConfigModule.forRoot({isGlobal:true}),
 SupabaseModule,
-CacheModule.registerAsync(RedisOptions)
+CacheModule.registerAsync(RedisOptions),
+ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService,SupabaseAuthGuard],
