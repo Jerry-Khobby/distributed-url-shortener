@@ -211,7 +211,7 @@ private async recordClick(
     const encryptedLongUrl = encrypt(long_url);
 
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getMinutes()+2);
+    expiresAt.setMinutes(expiresAt.getMinutes()+2);
 
     // Step 7: Insert into Supabase
     const { error: insertError } = await supabase.from('urls').insert({
@@ -242,13 +242,7 @@ private async recordClick(
 //I want to get the shortens urls,I want to grab the shorten url or the short code 
 async shortCode(shortCode:string,accessToken:string,userId:string,req?:any):Promise<{long_url:string}>{
   //I have to check if there is a shortcode in the database urls 
-  const supabase = createClient(
-          this.configService.get<string>('SUPABASE_URL')!,
-      this.configService.get<string>('SUPABASE_ANON_KEY')!,
-      {
-        global: { headers: { Authorization: `Bearer ${accessToken}` } },
-      },
-  )
+  const supabase = this.supabaseBase;
     //try and cache first - fast path 
     const cache = await this.cacheManager.get<{long_url:string}>(shortCode)
     if(cache){
