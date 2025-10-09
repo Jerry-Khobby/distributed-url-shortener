@@ -17,47 +17,57 @@ export class UrlsService {
     private readonly configService: ConfigService,
   ) {}
 
-  // 👇 Add this helper method
-  private async ensureProfileExists(
-    supabase: SupabaseClient,
-    userId: string,
-    email: string,
-  ): Promise<void> {
-    const maxRetries = 3;
-    const retryDelay = 1000; // 1 second
+private async ensureProfileExists(
+  supabase: SupabaseClient,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const maxRetries = 3;
+  const retryDelay = 1000;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      // 1️⃣ Check if profile already exists
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`🔍 [ensureProfileExists] Attempt ${attempt} for user: ${userId}`);
 
-      if (error) throw new Error(`Error checking profile: ${error.message}`);
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (profile) return; // ✅ Profile exists, we’re done
+    if (error) {
+      console.error('❌ Error checking profile:', error.message);
+      throw new Error(`Error checking profile: ${error.message}`);
+    }
 
-      // 2️⃣ Try to create profile manually
-      const { error: insertError } = await supabase
-        .from('profiles')
-        .insert({ id: userId, email })
-        .select()
-        .single();
+    if (profile) {
+      console.log('✅ Profile exists already');
+      return;
+    }
 
-      if (!insertError) return; // ✅ Successfully created
+    console.log('⚙️ Trying to create profile manually...');
+    const { error: insertError } = await supabase
+      .from('profiles')
+      .insert({ id: userId, email })
+      .select()
+      .single();
 
-      // If someone else created it at the same time, ignore
-      if (insertError.code === '23505') return;
+    if (!insertError) {
+      console.log('✅ Profile successfully created');
+      return;
+    }
 
-      // 3️⃣ Wait and retry
-      if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelay * attempt));
-      } else {
-        throw new Error('Failed to ensure profile exists after multiple attempts');
-      }
+    console.error('❌ Insert error:', insertError.message, insertError.details || '');
+    if (insertError.code === '23505') return;
+
+    if (attempt < maxRetries) {
+      console.log(`⏳ Retry ${attempt + 1} after delay...`);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay * attempt));
+    } else {
+      throw new Error('Failed to ensure profile exists after multiple attempts');
     }
   }
+}
+
 private async recordClick(
   supabase: SupabaseClient,
   shortCode: string,
