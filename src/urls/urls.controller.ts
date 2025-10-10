@@ -86,7 +86,7 @@ export class UrlsController {
       const accessToken = req.headers.authorization?.split(' ')[1] || process.env.SUPABASE_ANON_KEY!;
       const userId = req.user?.id || process.env.SUPABASE_SERVICE_USER!; // fallback if no user
 
-      const { long_url } = await this.urlsService.shortCode(shortCode, accessToken, userId);
+      const { long_url } = await this.urlsService.shortCode(shortCode, accessToken, userId,req);
 
       // 302 redirect to original URL
       return res.redirect(long_url);

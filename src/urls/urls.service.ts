@@ -7,6 +7,9 @@ import * as bcrypt from 'bcrypt';
 import { CodeGenerator } from '../config/code-generator';
 import { encrypt,decrypt } from '../middlewares/encrypt';
 import { Cron,CronExpression } from '@nestjs/schedule';
+import { Request } from 'express';
+import {UAParser} from 'ua-parser-js';
+import geoip from 'geoip-lite';
 
 
 
@@ -24,7 +27,7 @@ export class UrlsService {
   ) {}
 
 
-//@Cron(CronExpression.EVERY_MINUTE)
+@Cron(CronExpression.EVERY_MINUTE)
 async handleExpiredUrls() {
   console.log('⏰ Checking for expired URLs...');
   try {
@@ -148,29 +151,53 @@ private async ensureProfileExists(
   }
 }
 
-private async recordClick(
-  supabase: SupabaseClient,
-  shortCode: string,
-  req?: any, // express Request
-): Promise<void> {
+private async recordClick(shortCode: string, req?: Request): Promise<void> {
   try {
-    const ip =
-      req?.headers['x-forwarded-for']?.toString().split(',')[0] ||
-      req?.socket?.remoteAddress ||
-      null;
+    const supabaseAdmin = createClient(
+      this.configService.get<string>('SUPABASE_URL')!,
+      this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY')!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
 
-    const userAgent = req?.headers['user-agent'] || null;
+    // ✅ Step 1: Extract IP properly
+    const ip =
+      (req?.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req?.socket?.remoteAddress?.replace('::ffff:', '') ||
+      null;
+      const isLocal = ip === '::1' || ip === '127.0.0.1';
+
+    // ✅ Step 2: Device & Browser detection
+    const userAgent = req?.headers['user-agent'] || '';
+    const parser = new UAParser(userAgent);
+    parser.setUA(userAgent || '');
+    const result = parser.getResult();
+
+    const deviceType = result.device.type || 'desktop';
+    const browser = result.browser.name || 'Unknown';
+    const os = result.os.name || 'Unknown';
+
+    // ✅ Step 3: Referrer
     const referrer = req?.headers['referer'] || req?.headers['referrer'] || null;
 
-    await supabase.from('clicks').insert({
+    // ✅ Step 4: Geo lookup
+    const geo = !isLocal && ip ? geoip.lookup(ip) : null;
+    const country = isLocal ? 'Local' : geo?.country || null;
+    const city = isLocal ? 'Localhost' : geo?.city || null;
+
+    console.log('📊 Recording click for:', { shortCode, ip, browser, os, country, city,referrer });
+    // ✅ Step 5: Save click
+    await supabaseAdmin.from('clicks').insert({
       short_code: shortCode,
       clicked_at: new Date().toISOString(),
       ip_address: ip,
-      user_agent: userAgent,
-      referrer: referrer,
+      referrer,
+      device_type: deviceType,
+      browser,
+      os,
+      country,
+      city,
     });
   } catch (err) {
-    // Silent fail — don’t block redirect
     console.error('Failed to record click:', err.message);
   }
 }
@@ -279,7 +306,7 @@ async shortCode(shortCode:string,accessToken:string,userId:string,req?:any):Prom
     //try and cache first - fast path 
     const cache = await this.cacheManager.get<{long_url:string}>(shortCode)
     if(cache){
-      this.recordClick(supabase,shortCode,req)
+      this.recordClick(shortCode,req)
       return {long_url:cache.long_url}
     }
 
@@ -303,7 +330,7 @@ async shortCode(shortCode:string,accessToken:string,userId:string,req?:any):Prom
   await this.cacheManager.set(shortCode, { long_url: decrpytedUrl }, 86400);
 
  // 9️⃣ Record click (non-blocking)
-  this.recordClick(supabase, shortCode,req);
+  this.recordClick(shortCode,req);
 
 
   // 🔟 Return destination
