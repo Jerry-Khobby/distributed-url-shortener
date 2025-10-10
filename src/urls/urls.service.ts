@@ -24,45 +24,78 @@ export class UrlsService {
   ) {}
 
 
- //@Cron('*/10 * * * * *')
- async handleExpiredUrls(){
-  console.log('⏰ Checking for expired URLs...')
-  try{
+//@Cron(CronExpression.EVERY_MINUTE)
+async handleExpiredUrls() {
+  console.log('⏰ Checking for expired URLs...');
+  try {
     const now = new Date().toISOString();
-    // fetch URL that have expired 
-    const {data:expiredUrls,error:fetchError} = await this.supabaseBase.from('urls').select('id,short_code')
-    .lt('expires_at',now)
-
-    if(fetchError){
-      console.error('❌ Error fetching expired URLs:', fetchError.message);
-        return;
-    }
-    if(!expiredUrls || expiredUrls.length===0){
-        console.log('✅ No expired URLs found.');
-        return;
-    }
-    console.log(`🗑 Found ${expiredUrls.length} expired URL(s). Deleting...`);
-    const shortCodes = expiredUrls.map((u)=>u.short_code);
-
-    const {error:deleteError}= await this.supabaseBase
-    .from('urls')
-    .delete()
-    .lt('expires_at',now)
-          if (deleteError) {
-        console.error('❌ Error deleting expired URLs:', deleteError.message);
-      } else {
-        console.log(`🧹 Deleted expired URLs: ${shortCodes.join(', ')}`);
-
-        // Optional: remove them from cache too
-        for (const code of shortCodes) {
-          await this.cacheManager.del(code);
+    
+    // Create a service role client that bypasses RLS for cron operations
+    const supabaseAdmin = createClient(
+      this.configService.get<string>('SUPABASE_URL')!,
+      this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY')!, // Use service role key
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
         }
       }
+    );
+    
+    // Fetch URLs that have expired
+    const { data: expiredUrls, error: fetchError } = await supabaseAdmin
+      .from('urls')
+      .select('id, short_code')
+      .lt('expires_at', now)
+      .limit(100);
 
-  }catch(err){
-console.error('🔥 Cron job failed:', err.message);
+    if (fetchError) {
+      console.error('❌ Error fetching expired URLs:', fetchError.message);
+      return;
+    }
+
+    if (!expiredUrls || expiredUrls.length === 0) {
+      console.log('✅ No expired URLs found.');
+      return;
+    }
+
+    console.log(`🗑 Found ${expiredUrls.length} expired URL(s). Deleting...`);
+
+    // Extract IDs and short codes
+    const ids = expiredUrls.map((u) => u.id);
+    const shortCodes = expiredUrls.map((u) => u.short_code);
+
+    // Delete using the specific IDs - this will bypass RLS with service role
+    const { data: deletedData, error: deleteError } = await supabaseAdmin
+      .from('urls')
+      .delete()
+      .in('id', ids)
+      .select('id'); // Verify deletion happened
+
+    if (deleteError) {
+      console.error('❌ Error deleting expired URLs:', deleteError.message);
+      console.error('Delete error details:', deleteError);
+      return;
+    }
+
+    // Verify deletion count
+    const deletedCount = deletedData?.length || 0;
+    console.log(`🧹 Successfully deleted ${deletedCount} expired URL(s): ${shortCodes.join(', ')}`);
+
+    if (deletedCount !== expiredUrls.length) {
+      console.warn(`⚠️  Warning: Expected to delete ${expiredUrls.length} URLs but only deleted ${deletedCount}`);
+    }
+
+    // Remove from cache
+    for (const code of shortCodes) {
+      await this.cacheManager.del(code);
+    }
+
+  } catch (err) {
+    console.error('🔥 Cron job failed:', err.message);
+    console.error('Stack trace:', err.stack);
   }
- }
+}
 
 private async ensureProfileExists(
   supabase: SupabaseClient,
