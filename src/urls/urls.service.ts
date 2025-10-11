@@ -183,8 +183,6 @@ private async recordClick(shortCode: string, req?: Request): Promise<void> {
     const geo = !isLocal && ip ? geoip.lookup(ip) : null;
     const country = isLocal ? 'Local' : geo?.country || null;
     const city = isLocal ? 'Localhost' : geo?.city || null;
-
-    console.log('📊 Recording click for:', { shortCode, ip, browser, os, country, city,referrer });
     // ✅ Step 5: Save click
     await supabaseAdmin.from('clicks').insert({
       short_code: shortCode,
@@ -336,6 +334,164 @@ async shortCode(shortCode:string,accessToken:string,userId:string,req?:any):Prom
   // 🔟 Return destination
   return { long_url: decrpytedUrl };
 
+}
+
+// Add this method to your UrlsService class
+
+async getUrlStats(
+  shortCode: string,
+  userId: string,
+  accessToken: string,
+): Promise<any> {
+  const supabase = createClient(
+    this.configService.get<string>('SUPABASE_URL')!,
+    this.configService.get<string>('SUPABASE_ANON_KEY')!,
+    {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    },
+  );
+
+  // Step 1: Verify the URL exists and belongs to the user
+  const { data: url, error: urlError } = await supabase
+    .from('urls')
+    .select('*')
+    .eq('short_code', shortCode)
+    .maybeSingle();
+
+  if (urlError) {
+    throw new Error(`Error fetching URL: ${urlError.message}`);
+  }
+
+  if (!url) {
+    throw new NotFoundException(`URL with short code ${shortCode} not found`);
+  }
+
+  // Step 2: Verify ownership
+  if (url.user_id !== userId) {
+    throw new Error('You do not have permission to view stats for this URL');
+  }
+
+  // Step 3: Check cache for stats (5-minute TTL)
+  const cacheKey = `stats:${shortCode}`;
+  const cachedStats = await this.cacheManager.get(cacheKey);
+  if (cachedStats) {
+    return cachedStats;
+  }
+
+  // Step 4: Query all clicks for this URL
+  const { data: clicks, error: clicksError } = await supabase
+    .from('clicks')
+    .select('*')
+    .eq('short_code', shortCode)
+    .order('clicked_at', { ascending: false });
+
+  if (clicksError) {
+    throw new Error(`Error fetching clicks: ${clicksError.message}`);
+  }
+
+  // Step 5: Calculate statistics
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const totalClicks = clicks?.length || 0;
+
+  const clicksLast7Days = clicks?.filter(
+    (c) => new Date(c.clicked_at) >= sevenDaysAgo,
+  ).length || 0;
+
+  const clicksLast30Days = clicks?.filter(
+    (c) => new Date(c.clicked_at) >= thirtyDaysAgo,
+  ).length || 0;
+
+  // Group clicks by date (last 30 days)
+  const clicksByDate = clicks
+    ?.filter((c) => new Date(c.clicked_at) >= thirtyDaysAgo)
+    .reduce((acc, click) => {
+      const date = new Date(click.clicked_at).toISOString().split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+  const clicksByDateArray = Object.entries(clicksByDate || {})
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Top countries
+  const countryCount = clicks?.reduce((acc, click) => {
+    const country = click.country || 'Unknown';
+    acc[country] = (acc[country] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+const topCountries = Object.entries(countryCount || {})
+  .map(([country, count]) => ({ country, count: count as number }))
+  .sort((a, b) => (b.count as number) - (a.count as number))
+  .slice(0, 10);
+
+  // Top referrers
+  const referrerCount = clicks?.reduce((acc, click) => {
+    const referrer = click.referrer || 'Direct';
+    acc[referrer] = (acc[referrer] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+ const topReferrers = Object.entries(referrerCount || {})
+  .map(([referrer, count]) => ({ referrer, count: count as number }))
+  .sort((a, b) => (b.count as number) - (a.count as number))
+  .slice(0, 10);
+
+  // Device breakdown
+  const deviceCount = clicks?.reduce((acc, click) => {
+    const device = click.device_type || 'Unknown';
+    acc[device] = (acc[device] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+const deviceBreakdown = Object.entries(deviceCount || {})
+  .map(([device_type, count]) => ({ device_type, count: count as number }))
+  .sort((a, b) => (b.count as number) - (a.count as number));
+
+  // Browser breakdown
+  const browserCount = clicks?.reduce((acc, click) => {
+    const browser = click.browser || 'Unknown';
+    acc[browser] = (acc[browser] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+const browserBreakdown = Object.entries(browserCount || {})
+  .map(([browser, count]) => ({ browser, count: count as number }))
+  .sort((a, b) => (b.count as number) - (a.count as number));
+
+  // OS breakdown
+  const osCount = clicks?.reduce((acc, click) => {
+    const os = click.os || 'Unknown';
+    acc[os] = (acc[os] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+const osBreakdown = Object.entries(osCount || {})
+  .map(([os, count]) => ({ os, count: count as number }))
+  .sort((a, b) => (b.count as number) - (a.count as number));
+
+  // Step 6: Prepare response
+  const stats = {
+    short_code: shortCode,
+    total_clicks: totalClicks,
+    clicks_last_7_days: clicksLast7Days,
+    clicks_last_30_days: clicksLast30Days,
+    clicks_by_date: clicksByDateArray,
+    top_countries: topCountries,
+    top_referrers: topReferrers,
+    device_breakdown: deviceBreakdown,
+    browser_breakdown: browserBreakdown,
+    os_breakdown: osBreakdown,
+  };
+
+  // Step 7: Cache for 5 minutes (300 seconds)
+  await this.cacheManager.set(cacheKey, stats, 300);
+
+  return stats;
 }
 
 }

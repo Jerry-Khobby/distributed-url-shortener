@@ -1,36 +1,4 @@
-  // ============================================================
-  // Delete URL
-  // ============================================================
-  async deleteUrl(shortCode: string, userId: string, accessToken: string) {
-    const supabase = createClient(
-      this.configService.get<string>('SUPABASE_URL')!,
-      this.configService.get<string>('SUPABASE_ANON_KEY')!,
-      {
-        global: { headers: { Authorization: `Bearer ${accessToken}` } },
-      },
-    );
 
-    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
-    if (userError || !userData.user) throw new Error('Invalid authentication token');
-
-    const { error } = await supabase
-      .from('urls')
-      .delete()
-      .eq('short_code', shortCode)
-      .eq('user_id', userData.user.id);
-
-    if (error) throw new Error(`Error deleting URL: ${error.message}`);
-
-    await this.cacheManager.del(shortCode);
-    return { message: 'URL deleted successfully' };
-  }
-
-
-
-
-
-  this is the project, I'm working on , It's a backend , I'm trying to build , to sharpen my backend skills ,
-Since it's just backend , please check the database for me and the things involved to see whether it's feasible , I've already started and having auth present is already giving me issue in the backend logic and the items that are been returned from the database
 
 
 # Distributed URL Shortener with Supabase - Complete Roadmap
@@ -104,14 +72,6 @@ Stores every click on a short URL.
 - `device_type` (text - mobile/desktop/tablet)
 - `browser` (text, nullable)
 
-### **Table 4: url_stats_daily**
-Pre-calculated daily statistics (makes analytics faster).
-- `id` (UUID, primary key)
-- `short_code` (text)
-- `date` (date)
-- `total_clicks` (integer)
-- `unique_ips` (integer)
-- `top_country` (text)
 
 **Why this table?** If a URL has 1 million clicks, querying all of them every time someone wants stats is slow. This table stores daily summaries.
 
