@@ -10,7 +10,7 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import type { Response } from 'express'; // ✅ fixed
-import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOperation, ApiResponse, ApiTags,ApiParam } from '@nestjs/swagger';
 import { UrlsService } from './urls.service';
 import { UrlsDto } from './dto/url.dto';
 import { SupabaseAuthGuard } from '../middlewares/supabase.guard';
@@ -20,6 +20,19 @@ export class ShortUrlResponseDto {
   short_url: string;
   short_code: string;
   long_url: string;
+}
+
+export class UrlStatsResponseDto {
+  short_code: string;
+  total_clicks: number;
+  clicks_last_7_days: number;
+  clicks_last_30_days: number;
+  clicks_by_date: { date: string; count: number }[];
+  top_countries: { country: string; count: number }[];
+  top_referrers: { referrer: string; count: number }[];
+  device_breakdown: { device_type: string; count: number }[];
+  browser_breakdown: { browser: string; count: number }[];
+  os_breakdown: { os: string; count: number }[];
 }
 
 @ApiTags('URLs') // Groups endpoints under the "URLs" tag in Swagger UI
@@ -99,4 +112,47 @@ export class UrlsController {
   }
 
 
+    // 📊 NEW STATS ROUTE
+  @Get(':shortCode/stats')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiOperation({
+    summary: 'Get analytics for a shortened URL',
+    description: 'Retrieves detailed click statistics for a URL. Only accessible by the URL owner.',
+  })
+  @ApiParam({
+    name: 'shortCode',
+    description: 'The short code identifier',
+    example: 'a3X9k2',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully retrieved statistics',
+    type: UrlStatsResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - You do not own this URL',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Short URL not found',
+  })
+  async getUrlStats(
+    @Param('shortCode') shortCode: string,
+    @Req() req: any,
+  ) {
+    try {
+      const stats = await this.urlsService.getUrlStats(
+        shortCode,
+        req.user.id,
+        req.accessToken,
+      );
+      return stats;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new NotFoundException(error.message);
+      }
+      throw error;
+    }
+  }
 }
