@@ -336,13 +336,13 @@ async shortCode(shortCode:string,accessToken:string,userId:string,req?:any):Prom
 
 }
 
-// Add this method to your UrlsService class
-
 async getUrlStats(
+
   shortCode: string,
   userId: string,
   accessToken: string,
 ): Promise<any> {
+  // Add this method to your UrlsService class
   const supabase = createClient(
     this.configService.get<string>('SUPABASE_URL')!,
     this.configService.get<string>('SUPABASE_ANON_KEY')!,
