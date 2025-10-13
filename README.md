@@ -36,7 +36,7 @@ This URL shortener goes beyond basic link shortening. It's a comprehensive solut
 - **Developer-Friendly**: Auto-generated Swagger documentation
 
 **Live Demo**: [Coming Soon]  
-**Blog Post**: [Building a Production URL Shortener](link-to-hashnode)
+**Blog Post**: [Building a Production URL Shortener](link-to-hashnode-to-be-added)
 
 ---
 
@@ -139,8 +139,7 @@ This URL shortener goes beyond basic link shortening. It's a comprehensive solut
 #### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/url-shortener.git
-cd url-shortener
+git clone https://github.com/Jerry-Khobby/distributed-url-shortener
 ```
 
 #### 2. Install Dependencies
@@ -253,9 +252,15 @@ NODE_ENV=development
 ENCRYPTION_KEY=your-32-character-hex-string
 
 # Redis
-REDIS_HOST=localhost
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_JWT_SECRET=
+PORT=5000
+REDIS_HOST=localhost 
 REDIS_PORT=6379
 REDIS_PASSWORD=
+ENCRYPTION_KEY=
+SHORT_URL_DOMAIN=
 ```
 
 #### 5. Start Redis
@@ -285,9 +290,9 @@ npm run build
 npm run start:prod
 ```
 
-The API will be available at `http://localhost:3000`.
+The API will be available at `http://localhost:5000`.
 
-**Swagger Documentation**: `http://localhost:3000/api`
+**Swagger Documentation**: `http://localhost:5000/api-docs`
 
 ---
 
@@ -648,7 +653,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Author**: Your Name  
 **Email**: your.email@example.com  
 **Blog**: [Hashnode Blog](your-hashnode-url)  
-**GitHub**: [@yourusername](https://github.com/yourusername)
+**GitHub**: [@yourusername](https://github.com/Jerry-Khobby)
 
 ---
 
