@@ -650,9 +650,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-**Author**: Your Name  
-**Email**: your.email@example.com  
-**Blog**: [Hashnode Blog](your-hashnode-url)  
+**Author**: Jeremiah Anku Coblah 
+**Email**: jeremiah.anku.coblah@gmail.com 
+**Blog**: [Hashnode Blog](https://jerry-khobby.hashnode.dev/building-a-production-ready-url-shortener-with-nestjs-supabase-and-redis-a-complete-journey)  
 **GitHub**: [@yourusername](https://github.com/Jerry-Khobby)
 
 ---
